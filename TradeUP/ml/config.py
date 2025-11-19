@@ -3,7 +3,8 @@
 📌 config.py  — ML 파트 공통 설정 파일 (FINAL)
 ===========================================================
 """
-
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
 import os
 from datetime import datetime
 

@@ -23,14 +23,14 @@ if PROJECT_ROOT not in sys.path:
 # 이제 ml.config import가 어디서 실행해도 됨
 from ml.config import (
     DATA_DIR,
-    RAW_DATA_DIR,
     PROCESSED_DATA_DIR,
     FINAL_CSV_PATH,
+    RAW_DATA_DIR,
+    RESULT_DIR,
     FRED_API_KEY,
     ECOS_API_KEY,
     log
 )
-
 
 # ================================================================
 # 날짜 범위 설정
@@ -50,11 +50,7 @@ BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 
 def fetch_fred_series(series_id):
-    """
-    FRED 단일 시계열 수집 함수.
-    TradeUP에서는 문자열 줄바꿈 시 파라미터 깨짐이 발생하므로,
-    한 줄로 깔끔하게 연결되는 방식으로 구성해야 한다.
-    """
+    """FRED 단일 시계열 수집"""
 
     url = (
         f"{BASE_URL}"
@@ -65,8 +61,8 @@ def fetch_fred_series(series_id):
         f"&observation_end={TODAY}"
     )
 
-    response = requests.get(url)
-    data = response.json()
+    res = requests.get(url)
+    data = res.json()
 
     if "observations" not in data:
         print("[DEBUG FRED ERROR RESPONSE]", data)
@@ -76,6 +72,7 @@ def fetch_fred_series(series_id):
     df = pd.DataFrame(data["observations"])[["date", "value"]]
     df.columns = ["date", series_id]
     df[series_id] = pd.to_numeric(df[series_id], errors="coerce")
+
     return df
 
 
@@ -108,7 +105,7 @@ def load_fred_data():
 
     final["US_Avg"] = (final["US_Upper"] + final["US_Lower"]) / 2
 
-    # 날짜 보정 + 결측치 보완
+    # 날짜 누락 보정
     final = pd.merge(DATE_FRAME, final, on="date", how="left").sort_values("date").ffill()
 
     log("✅ [FRED] 수집 완료")
@@ -116,7 +113,7 @@ def load_fred_data():
 
 
 # ================================================================
-# 2) ECOS 한국 데이터
+# 2) ECOS 한국 지표
 # ================================================================
 def load_ecos_data():
     log("📡 [ECOS] 한국 데이터 수집 시작")
@@ -131,13 +128,13 @@ def load_ecos_data():
 
     dfs = []
     for key, info in series.items():
-        ecos_url = (
+        url = (
             f"https://ecos.bok.or.kr/api/StatisticSearch/{ECOS_API_KEY}/json/kr/1/1000/"
             f"{info['stat']}/M/{START_YM}/{END_YM}/{info['item']}"
         )
-        res = requests.get(ecos_url).json()
-
+        res = requests.get(url).json()
         rows = res["StatisticSearch"]["row"]
+
         df = pd.DataFrame(rows)[["TIME", "DATA_VALUE"]]
         df.columns = ["date", key]
         df["date"] = pd.to_datetime(df["date"], format="%Y%m").dt.strftime("%Y-%m-%d")
@@ -160,12 +157,29 @@ def load_ecos_data():
 def load_yahoo_data():
     log("📡 [Yahoo] 금융시장 데이터 수집 시작")
 
-    raw = yf.download("USDKRW=X", start=START_DATE, end=TODAY, progress=False)[["Close"]].reset_index()
+    # -------------------------
+    # USD/KRW
+    # -------------------------
+    raw = yf.download(
+        "USDKRW=X",
+        start=START_DATE,
+        end=TODAY,
+        auto_adjust=False,
+        progress=False
+    )[["Close"]].reset_index()
+
     raw.columns = ["date", "USD/KRW"]
     raw["date"] = pd.to_datetime(raw["date"])
 
     df = pd.DataFrame({"date": DATE_RANGE})
     df = df.merge(raw, on="date", how="left")
+
+    # 2019-12-31 fallback
+    if pd.isna(df.loc[0, "USD/KRW"]):
+        prev_day = raw[raw["date"] == pd.Timestamp("2019-12-31")]["USD/KRW"].values
+        if len(prev_day) > 0:
+            df.loc[0, "USD/KRW"] = prev_day[0]
+
     df["USD/KRW"] = df["USD/KRW"].ffill()
 
     df["MA_7"] = df["USD/KRW"].rolling(7).mean()
@@ -173,6 +187,9 @@ def load_yahoo_data():
     df["Change(%)"] = df["USD/KRW"].pct_change() * 100
     df["Change(%)"] = df["Change(%)"].fillna(0)
 
+    # -------------------------
+    # 주요지수
+    # -------------------------
     indices = {
         "KOSPI": "^KS11",
         "SP500": "^GSPC",
@@ -181,10 +198,20 @@ def load_yahoo_data():
     }
 
     for name, ticker in indices.items():
-        tdf = yf.download(ticker, start=START_DATE, end=TODAY, progress=False)[["Close"]].reset_index()
-        tdf.columns = ["date", name]
-        tdf["date"] = pd.to_datetime(tdf["date"])
-        df = df.merge(tdf, on="date", how="left")
+        tmp = yf.download(
+            ticker, start=START_DATE, end=TODAY,
+            auto_adjust=True, progress=False
+        )[["Close"]].reset_index()
+
+        tmp.columns = ["date", name]
+        tmp["date"] = pd.to_datetime(tmp["date"])
+
+        df = df.merge(tmp, on="date", how="left")
+
+        prev_val = tmp[tmp["date"] == pd.Timestamp("2019-12-31")][name].values
+        if len(prev_val) > 0 and pd.isna(df.loc[0, name]):
+            df.loc[0, name] = prev_val[0]
+
         df[name] = df[name].ffill().bfill()
 
     df["date"] = df["date"].dt.strftime("%Y-%m-%d")
@@ -194,7 +221,7 @@ def load_yahoo_data():
 
 
 # ================================================================
-# 4) 병합 & 파생변수 생성
+# 4) 최종 병합 + 파생변수
 # ================================================================
 def build_final_csv():
     log("[FINAL] 최종 데이터 병합 및 파생변수 생성 시작")
@@ -221,36 +248,27 @@ def build_final_csv():
 # 5) 오늘 예측용 X_today 생성
 # ================================================================
 def generate_today_features():
-    """
-    final.csv 기반으로 오늘 예측용 1-row feature(X_today)를 생성.
-    train_model.py에서 사용한 feature engineering(특히 lag)과 동일하게 처리해야 함.
-    """
+
     if not os.path.exists(FINAL_CSV_PATH):
         build_final_csv()
 
     df = pd.read_csv(FINAL_CSV_PATH)
 
-    # -----------------------------
-    # train_model.py와 동일한 처리
-    # -----------------------------
     df["log_usdkrw"] = np.log(df["USD/KRW"])
     df["log_diff"] = df["log_usdkrw"].diff()
 
-    # lag feature 생성 (중요)
+    # Lag Features
     for lag in [1, 2, 3]:
         df[f"USD/KRW_lag{lag}"] = df["USD/KRW"].shift(lag)
 
     df = df.dropna().reset_index(drop=True)
 
-    # 오늘 데이터 1행
     X_today = df.iloc[-1:].drop(columns=["date", "log_usdkrw", "log_diff"])
-
     return X_today
 
 
-
 # ================================================================
-# 6) VSCode 직접 실행 지원
+# 6) VSCode에서 단독 실행
 # ================================================================
 if __name__ == "__main__":
     print("🚀 data_preprocessing.py 실행 시작!")
