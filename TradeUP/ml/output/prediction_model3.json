@@ -1,0 +1,27 @@
+{
+  "date": "2025-11-18",
+  "predicted_direction": "DOWN",
+  "confidence": 0.99,
+  "top_features": [
+    {
+      "name": "Change(%)",
+      "impact": "+0.000"
+    },
+    {
+      "name": "USD/KRW_lag1",
+      "impact": "+0.000"
+    },
+    {
+      "name": "Change(%)_lag1",
+      "impact": "+0.000"
+    },
+    {
+      "name": "mom_90d",
+      "impact": "+0.000"
+    },
+    {
+      "name": "MA_7",
+      "impact": "+0.000"
+    }
+  ]
+}
