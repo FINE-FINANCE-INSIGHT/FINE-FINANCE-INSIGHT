@@ -1,27 +1,27 @@
 {
-  "date": "2025-11-17",
+  "date": "2025-11-25",
   "predicted_direction": "DOWN",
-  "confidence": 0.842,
+  "confidence": 0.954,
   "top_features": [
     {
-      "name": "USD/KRW_lag1",
-      "impact": "-0.919"
-    },
-    {
       "name": "USD/KRW_lag3",
-      "impact": "-0.612"
+      "impact": "-1.039"
     },
     {
-      "name": "DXY",
-      "impact": "-0.545"
+      "name": "USD/KRW_lag1",
+      "impact": "-0.634"
     },
     {
-      "name": "SP500",
-      "impact": "-0.355"
+      "name": "Change(%)",
+      "impact": "-0.546"
     },
     {
       "name": "USD/KRW_lag2",
-      "impact": "-0.327"
+      "impact": "-0.490"
+    },
+    {
+      "name": "mom_90d",
+      "impact": "-0.404"
     }
   ]
 }

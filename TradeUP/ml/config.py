@@ -5,6 +5,7 @@
 """
 import sys
 sys.stdout.reconfigure(encoding='utf-8')
+
 import os
 from datetime import datetime
 
@@ -34,16 +35,15 @@ FINAL_CSV_PATH = os.path.join(PROCESSED_DATA_DIR, "final.csv")
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 
 def RESULT_JSON_PATH():
+    """오늘 날짜 기반 JSON 파일 저장 경로를 반환"""
     today = datetime.today().strftime("%Y-%m-%d")
     return os.path.join(RESULT_DIR, f"{today}.json")
 
 # ============================================================
-# 4️⃣ 외부 API Key (실제 키 적용된 버전)
+# 4️⃣ 외부 API Key
 # ============================================================
-# 반드시 타이핑으로 입력하면 오류 없음!
-
-FRED_API_KEY = "437f7530f06e8e0320f082cca21941d9"   # ✔ FRED API KEY
-ECOS_API_KEY = "M0EEUL0QP8TTA3RAM4Q9"               # ✔ ECOS API KEY
+FRED_API_KEY = "437f7530f06e8e0320f082cca21941d9"
+ECOS_API_KEY = "M0EEUL0QP8TTA3RAM4Q9"
 
 # ============================================================
 # 5️⃣ 공통 로그 함수
